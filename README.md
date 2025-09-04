@@ -90,6 +90,6 @@ MeubotContábil/
 
 - O vídeo é **curto** (30-40s) para mostrar rapidamente o bot funcionando  
 - Funciona **direto no Telegram**, sem necessidade de interface web  
-- Permite que recrutadores vejam seu **controle de dados financeiros e interface amigável**  
+ 
 
 ---
