@@ -62,13 +62,21 @@ No vídeo você vê:
 ## 📂 Estrutura do Projeto
 financasbot/
 ├─ db.py # Conexão e funções de banco de dados
+
 ├─ bot.py # Script principal do bot
+
 ├─ services/
+
 │ ├─ extra.py # Normalização de valores e exportação
+
 │ └─ security.py # Validações de entradas do usuário
+
 ├─ config.py # Token e configurações
+
 ├─ assests/
+
 │ ├─ reame.mp4 #video para demonstração
+
 └─ README.md # Este arquivo
 
 ---
