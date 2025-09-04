@@ -27,3 +27,22 @@ async def exportar_planilha(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     output.seek(0)
     await update.message.reply_document(document=output, filename="transacoes.csv")
+
+#-------Melhorando Campo de Valor do Usuário
+
+def normalizar_valor(valor_str: str) -> float | None:
+    """
+    Converte valor enviado pelo usuário em float.
+    Aceita vírgula como separador decimal e ponto como separador de milhar.
+    Ex: "5.000" -> 5000, "5.000,50" -> 5000.50
+    Retorna None se valor inválido.
+    """
+    try:
+       
+        valor_str = valor_str.strip()
+        valor_str = valor_str.replace('.', '')
+        valor_str = valor_str.replace(',', '.')
+        valor = round(float(valor_str), 2)
+        return valor
+    except ValueError:
+        return None

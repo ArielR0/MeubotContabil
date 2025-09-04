@@ -1,5 +1,6 @@
 from supabase import create_client, Client
 from datetime import datetime, timedelta
+from decimal import Decimal
 from config import SUPABASE_URL, SUPABASE_KEY
 
 # -------------------- Configuração do Supabase --------------------
@@ -61,22 +62,66 @@ def get_transactions_week(user_id):
     return resp.data
 
 
-def set_alert(user_id, limite, categoria=None):
-    supabase.table("alert_limits").upsert({
+from supabase import create_client, Client
+from datetime import datetime, timedelta
+from config import SUPABASE_URL, SUPABASE_KEY
+
+# -------------------- Configuração do Supabase --------------------
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# -------------------- Usuários --------------------
+def add_user(chat_id, nome):
+    """Adiciona um usuário, ou retorna o id se já existir"""
+    user = supabase.table("users").select("*").eq("chat_id", chat_id).execute()
+    if user.data:
+        return user.data[0]['id']
+    
+    novo = supabase.table("users").insert({
+        "chat_id": chat_id,
+        "nome": nome
+    }).execute()
+    return novo.data[0]['id']
+
+def get_user_id(chat_id):
+    """Retorna o id do usuário pelo chat_id"""
+    user = supabase.table("users").select("*").eq("chat_id", chat_id).execute()
+    if user.data:
+        return user.data[0]['id']
+    return None
+
+# -------------------- Transações --------------------
+def add_transaction(user_id, valor, categoria, tipo):
+    supabase.table("transactions").insert({
         "user_id": user_id,
-        "categoria": categoria,
-        "limite": limite
-    }, on_conflict=["user_id", "categoria"]).execute()
+        "valor": valor,
+        "categoria": categoria.lower(),
+        "tipo": tipo.lower(),
+        "data": datetime.now().isoformat()
+    }).execute()
 
-def get_alert(user_id, categoria=None):
-    query = supabase.table("alert_limits").select("*").eq("user_id", user_id)
-    if categoria:
-        query = query.eq("categoria", categoria)
-    resp = query.execute()
-    return resp.data[0] if resp.data else None
+def get_balance(user_id):
+    resp = supabase.table("transactions").select("valor,tipo").eq("user_id", user_id).execute()
+    saldo = Decimal('0.00')
+    for t in resp.data:
+        valor = Decimal(str(t['valor'])) 
+        if t['tipo'] == 'receita':
+            saldo += valor
+        else:
+            saldo -= valor
+    return float(saldo)
 
-def remove_alert(user_id, categoria=None):
-    query = supabase.table("alert_limits").delete().eq("user_id", user_id)
-    if categoria:
-        query = query.eq("categoria", categoria)
-    query.execute()
+def get_transactions(user_id):
+    """Retorna todas as transações do usuário"""
+    resp = supabase.table("transactions").select("*").eq("user_id", user_id).order("data", desc=True).execute()
+    return resp.data
+
+def get_transactions_week(user_id):
+    """Retorna transações da última semana"""
+    semana_passada = datetime.now() - timedelta(days=7)
+    resp = supabase.table("transactions")\
+        .select("*")\
+        .eq("user_id", user_id)\
+        .gte("data", semana_passada.isoformat())\
+        .execute()
+    return resp.data
+

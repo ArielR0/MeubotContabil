@@ -7,14 +7,13 @@ from db import (
     get_balance,
     get_transactions,
     get_transactions_week,
-    get_alert,
-    set_alert,
-    remove_alert,
+    supabase
 )
 import matplotlib.pyplot as plt
 from io import BytesIO
 from config import BOT_TOKEN
 from services.extra import exportar_planilha
+from services.extra import normalizar_valor
 from services.security import validar_valor, validar_tipo, validar_categoria, sanitizar_texto
 
 
@@ -44,7 +43,7 @@ async def saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = get_user_id(chat_id)
     if user_id:
         saldo_atual = get_balance(user_id)
-        await update.message.reply_text(f"💰 Seu saldo atual é: R$ {saldo_atual:.2f}")
+        await update.message.reply_text(f"💰 Seu saldo atual é: R$ {saldo_atual:.3f}")
     else:
         await update.message.reply_text("Usuário não encontrado. Use /start primeiro.")
 
@@ -106,9 +105,30 @@ Vamos começar? 😄
 
     # ---------------- Comandos do usuário ---------------- #
     if "oi" in texto or "olá" in texto:
+     await update.message.reply_text(
+        f"Olá {update.effective_user.first_name}! 👋 Que bom te ver por aqui! 😄\n\n"
+        "Você pode começar registrando suas despesas ou receitas, "
+        "ou verificando seu saldo atual. Alguns comandos para te ajudar 😀:\n\n"
+        "- adicionar 50(O valor que quiser) salário receita\n\n"
+        "- adicionar 50 alimentação despesa\n\n"
+        "- saldo\n\n"
+        "- gráfico\n\n"
+        "- zerar saldo\n\n"
+        "Vamos lá?"
+    )
+
+    elif "zerar saldo" in texto:
+        saldo_atual = get_balance(user_id)
+        if saldo_atual == 0:
+            await update.message.reply_text("✅ Seu saldo já está zerado!")
+            return
+
+       
+        add_transaction(user_id, saldo_atual, "Ajuste saldo", "despesa")
         await update.message.reply_text(
-            f"Olá {update.effective_user.first_name}! Quer adicionar uma transação ou ver seu saldo?"
+            f"✅ Saldo zerado! Uma despesa de R$ {saldo_atual:.2f} foi registrada como ajuste."
         )
+
 
     elif "saldo" in texto:
         saldo_atual = get_balance(user_id)
@@ -117,59 +137,43 @@ Vamos começar? 😄
     elif "adicionar" in texto:
         partes = texto.split()
         if len(partes) >= 4:
-            try:
-                valor = float(partes[1])
-                tipo = partes[-1].lower()
-                categoria = " ".join(partes[2:-1])
-
-                if tipo not in ["receita", "despesa"]:
-                    await update.message.reply_text("Tipo inválido! Use 'receita' ou 'despesa'.")
-                    return
-
-                add_transaction(user_id, valor, categoria, tipo)
+            entrada_valor = partes[1]  
+            valor = normalizar_valor(entrada_valor)
+            if valor is None:
                 await update.message.reply_text(
-                    f"✅ {tipo.capitalize()} de R$ {valor:.2f} adicionada na categoria '{categoria}'!"
+                    "Não consegui entender o valor. Use apenas números, ex: 50, 50.0 ou 50,50"
                 )
+                return
 
-                # -------------------- ALERTA -------------------- #
-                if tipo == "despesa":
-                    alerta = get_alert(user_id, categoria)
-                    if alerta and valor > alerta["limite"]:
-                        await update.message.reply_text(
-                            f"⚠️ Atenção! Você ultrapassou o limite de R$ {alerta['limite']} na categoria '{categoria}'"
-                        )
+            tipo = partes[-1].lower()
+            if tipo not in ["receita", "despesa"]:
+                await update.message.reply_text("Tipo inválido! Use 'receita' ou 'despesa'.")
+                return
 
-            except ValueError:
-                await update.message.reply_text(
-                    "Não consegui entender o valor. Exemplo: adicionar 50 alimentação despesa"
-                )
+            categoria = " ".join(partes[2:-1])
+
+            add_transaction(user_id, valor, categoria, tipo)
+
+            await update.message.reply_text(
+                f"✅ {tipo.capitalize()} de R$ {entrada_valor} adicionada na categoria '{categoria}'!"
+            )
         else:
             await update.message.reply_text("Formato correto: adicionar <valor> <categoria> <tipo>")
 
-    elif "limite" in texto:
-        partes = texto.split()
-        if len(partes) >= 2:
-            if partes[1].lower() == "remover":
-                categoria = " ".join(partes[2:]) if len(partes) > 2 else None
-                remove_alert(user_id, categoria)
-                msg = "✅ Limite removido"
-                if categoria:
-                    msg += f" para a categoria '{categoria}'"
-                await update.message.reply_text(msg)
-            else:
-                try:
-                    valor = float(partes[1])
-                    categoria = " ".join(partes[2:]) if len(partes) > 2 else None
-                    set_alert(user_id, valor, categoria)
-                    msg = f"✅ Limite de R$ {valor:.2f} "
-                    msg += f"para categoria '{categoria}'" if categoria else "para todas as despesas"
-                    await update.message.reply_text(msg)
-                except ValueError:
-                    await update.message.reply_text("Não consegui entender o valor do limite.")
-        else:
-            await update.message.reply_text(
-                "Formato correto: limite <valor> <categoria opcional> ou limite remover <categoria opcional>"
-            )
+    elif "zerar despesas" in texto:
+        transacoes = get_transactions(user_id)
+        despesas = [t for t in transacoes if t['tipo'] == 'despesa' and t['categoria'].lower() != "ajuste saldo"]
+
+        if not despesas:
+            await update.message.reply_text("✅ Você não tem despesas cadastradas para zerar.")
+            return
+
+        # Deleta todas as despesas (exceto ajustes)
+        for d in despesas:
+            supabase.table("transactions").delete().eq("id", d['id']).execute()
+
+        await update.message.reply_text(f"✅ Todas as suas despesas ({len(despesas)}) foram zeradas!")
+
 
     elif "grafico" in texto or "gráfico" in texto:
         await gerar_grafico(update, context)
@@ -182,7 +186,7 @@ Vamos começar? 😄
 
     else:
         await update.message.reply_text(
-            "Desculpe, não entendi 😅. Você pode me mandar 'saldo', 'adicionar <valor> <categoria> <tipo>', 'grafico' ou 'resumo' para ver seus gastos."
+            "Desculpe, não entendi 😅. Você pode me mandar 'saldo', 'adicionar <valor> <categoria> <tipo>', 'grafico', 'resumo' ou 'zerar despesas' para ver seus gastos."
         )
 
 
@@ -192,35 +196,45 @@ async def gerar_grafico(update, context):
     user_id = get_user_id(chat_id)
 
     if not user_id:
-        await update.message.reply_text("Usuário não encontrado. Use /start primeiro.")
+        await update.message.reply_text("Usuário não encontrado. Use o bot primeiro.")
         return
 
     transacoes = get_transactions(user_id)
-    despesas = [t for t in transacoes if t['tipo'] == 'despesa']
+    # Filtra apenas despesas "reais", ignorando ajustes ou transações de teste
+    despesas = [
+        t for t in transacoes 
+        if t['tipo'] == 'despesa' and t['categoria'].lower() != "ajuste saldo" and float(t['valor']) > 0
+    ]
 
     if not despesas:
-        await update.message.reply_text("Você ainda não tem despesas cadastradas.")
+        await update.message.reply_text("Você ainda não tem despesas válidas cadastradas.")
         return
 
     categorias = {}
     for d in despesas:
-        categorias[d['categoria']] = categorias.get(d['categoria'], 0) + float(d['valor'])
+        cat = d['categoria'].strip()
+        categorias[cat] = categorias.get(cat, 0) + float(d['valor'])
 
     labels = list(categorias.keys())
     valores = list(categorias.values())
 
-    plt.figure(figsize=(6, 6))
-    plt.pie(valores, labels=labels, autopct="%1.1f%%", startangle=140)
+    plt.figure(figsize=(7, 7))
+    plt.pie(valores, labels=None, autopct="%1.1f%%", startangle=90)
+    plt.axis('equal')  # Mantém o gráfico redondo
     plt.title("Gastos por Categoria")
 
+    # Legenda à direita, quebrando nomes longos
+    plt.legend(
+        [f"{label}: R$ {val:.2f}" for label, val in zip(labels, valores)], 
+        bbox_to_anchor=(1, 0.5), loc="center left"
+    )
+
     buffer = BytesIO()
-    plt.savefig(buffer, format="png")
+    plt.savefig(buffer, format="png", bbox_inches="tight")
     buffer.seek(0)
     plt.close()
 
     await update.message.reply_photo(photo=buffer)
-
-
 # -------------------- RESUMO SEMANAL -------------------- #
 async def resumo_semanal(update, context):
     chat_id = update.effective_chat.id
@@ -236,7 +250,7 @@ async def resumo_semanal(update, context):
 
     saldo_atual = get_balance(user_id)
     transacoes = get_transactions_week(user_id)
-    despesas = [t for t in transacoes if t["tipo"] == "despesa"]
+    despesas = [t for t in transacoes if t["tipo"] == "despesa" and t["categoria"].lower() != "ajuste saldo"]
 
     if despesas:
         resumo = {}
