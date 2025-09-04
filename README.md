@@ -12,11 +12,16 @@ Veja o bot em ação (vídeo curto de **~35 segundos**) mostrando as principais 
 <video src="assets/readme.mp4" controls width="500"></video>
 
 No vídeo você vê:  
-1. Adicionando receita: `adicionar 5000 salario receita`  
+1. Adicionando receita: `adicionar 5000 salario receita` ,
+
 2. Adicionando despesa: `adicionar 50 alimentação despesa`  
+
 3. Verificando saldo: `saldo`  
+
 4. Gerando gráfico: `grafico`  
+
 5. Resumo semanal: `resumo`  
+
 6. Exportando planilha: `exportar excel`  
 
 ---
