@@ -1,4 +1,4 @@
-# 💰 FinançasBot - Controle suas despesas e receitas no Telegram
+# 💰 Meu Bot Contábil - Controle suas despesas e receitas no Telegram
 
 Um bot **simples, prático e funcional** para controlar seu dinheiro diretamente no Telegram!  
 Adicione transações, veja saldo, gere gráficos e resumo semanal, e até exporte tudo para Excel.
@@ -60,7 +60,7 @@ No vídeo você vê:
 ---
 
 ## 📂 Estrutura do Projeto
-financasbot/
+MeubotContábil/
 ├─ db.py # Conexão e funções de banco de dados
 
 ├─ bot.py # Script principal do bot
